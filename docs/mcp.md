@@ -16,6 +16,7 @@ sequenceDiagram
     participant Audio as Audio Output
 
     Agent->>MCP: MCP call: speak(text="Hello", voice="am_michael", speed=1.0)
+    MCP->>MCP: Validate voice, clamp speed, cap text
     MCP->>Engine: engine.speak("Hello", voice="am_michael", speed=1.0)
     Engine->>Engine: Synthesize via kokoro-onnx
     Engine->>Audio: Play via sounddevice
@@ -34,9 +35,15 @@ sequenceDiagram
 | | `speed: float = 1.0` — speed from 0.5 to 2.0 |
 | Returns | `str` — confirmation (`Spoke: ...`) or error message |
 
+### Input Validation
+
+- **voice**: Must match pattern `{2 lowercase letters}_{2-20 lowercase letters}` (e.g. `am_michael`, `af_heart`)
+- **speed**: Clamped to 0.5-2.0 range
+- **text**: Truncated at 10,000 characters
+
 ## Entry Point
 
-The MCP server is installed as `speak-mcp` via `uv tool install .[mcp]`. It runs `speaker.mcp_server:main` which starts a FastMCP server on stdio.
+The MCP server is installed as `speak-mcp` via `uv tool install .`. It runs `speaker.mcp_server:main` which starts a FastMCP server on stdio.
 
 ```bash
 # Verify it's installed
@@ -48,7 +55,7 @@ speak-mcp
 
 ## Adding to Any Agent
 
-All agents use the same MCP config pattern. Add to your agent's MCP server configuration:
+All agents use the same MCP config pattern:
 
 ```json
 {
@@ -61,74 +68,28 @@ All agents use the same MCP config pattern. Add to your agent's MCP server confi
 }
 ```
 
-### Platform-Specific Configs
+See [agent-install.md](agent-install.md) for platform-specific config locations.
 
-**Claude Code** (`~/.claude/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "speaker": {
-      "command": "speak-mcp",
-      "args": []
-    }
-  }
-}
-```
+## Voices
 
-**Kiro CLI** (in agent JSON):
-```json
-{
-  "mcpServers": {
-    "speaker": {
-      "command": "speak-mcp",
-      "args": [],
-      "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
-    }
-  },
-  "allowedTools": ["mcp_speaker_speak"]
-}
-```
+| Voice | Description |
+|-------|-------------|
+| `am_michael` | American male (default) — clear, natural |
+| `af_heart` | American female — warm tone |
+| `af_bella` | American female — bright |
+| `am_adam` | American male — deeper |
+| `bf_emma` | British female |
 
-Kiro uses the `mcp_{server}_{tool}` naming convention, so the tool is `mcp_speaker_speak`.
+## Speed
 
-**Gemini CLI** (`~/.gemini/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "speaker": {
-      "command": "speak-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-**OpenCode** (`~/.config/opencode/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "speaker": {
-      "command": "speak-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-**Crush** (`crush.json`):
-```json
-{
-  "$schema": "https://charm.land/crush.json",
-  "mcp": {
-    "speaker": {
-      "type": "stdio",
-      "command": "speak-mcp",
-      "args": [],
-      "timeout": 120
-    }
-  }
-}
-```
+| Speed | Effect |
+|-------|--------|
+| `0.5` | Half speed — very slow, useful for dense content |
+| `0.8` | Slightly slow — good for learning |
+| `1.0` | Normal (default) |
+| `1.2` | Slightly fast — good for familiar content |
+| `1.5` | Fast — skimming |
+| `2.0` | Maximum — double speed |
 
 ## Testing
 
@@ -139,12 +100,7 @@ speak-mcp
 # Ctrl+C to exit
 ```
 
-**Test the underlying engine:**
-```bash
-speak "MCP test"
-```
-
-If the CLI works but the MCP tool doesn't in your agent, the issue is in the agent's MCP config — see [troubleshooting.md](troubleshooting.md#mcp-server-not-showing-in-tools).
+If the server starts but the tool doesn't work in your agent, check the agent's MCP config — see [troubleshooting.md](troubleshooting.md#mcp-server-not-working).
 
 ## Server Source
 
@@ -160,9 +116,7 @@ _engine = SpeakerEngine()
 @mcp.tool()
 def speak(text: str, voice: str = "am_michael", speed: float = 1.0) -> str:
     """Speak text aloud using high-quality local TTS."""
-    if not text.strip():
-        return "No text provided."
     if _engine.speak(text, voice=voice, speed=speed):
         return f"Spoke: {text[:80]}..."
-    return "TTS failed — check that kokoro-onnx models are downloaded."
+    return "TTS failed."
 ```

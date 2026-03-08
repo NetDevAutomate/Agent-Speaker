@@ -41,57 +41,7 @@ Toggle voice output during any Kiro CLI agent session.
 3. The agent calls the `speak` MCP tool after each response
 4. Type `@speak-stop` to disable
 
-**Example:**
-```
-You: @speak-start
-Agent: Voice enabled. I'll speak my responses aloud from now on.
-
-You: Explain Python generators
-Agent: [explains generators — text spoken aloud automatically]
-
-You: @speak-stop
-Agent: Voice disabled.
-```
-
-## 3. Standalone CLI Usage
-
-Use `speak` directly from the terminal or in scripts.
-
-**Basic usage:**
-```bash
-speak "Hello, can you hear me?"
-```
-
-**Pipe from stdin:**
-```bash
-echo "Pipeline text" | speak -
-cat notes.txt | speak -
-```
-
-**Custom voice and speed:**
-```bash
-speak "Fast and feminine" -v af_heart -s 1.3
-speak "Slow and clear" -v am_michael -s 0.8
-```
-
-**macOS fallback:**
-```bash
-speak "Using Apple TTS" -b macos
-```
-
-**In scripts:**
-```bash
-#!/usr/bin/env bash
-# Announce deployment status
-speak "Deployment to staging complete. Running smoke tests."
-if ./run-tests.sh; then
-    speak "All tests passed."
-else
-    speak "Tests failed. Check the logs."
-fi
-```
-
-## 4. Adding Speaker to an Existing Custom Agent
+## 3. Adding Speaker to an Existing Agent
 
 You have an AI agent and want to add voice support.
 
@@ -118,22 +68,17 @@ You have an AI agent and want to add voice support.
 
 3. For Kiro agents, add `"mcp_speaker_speak"` to `allowedTools`.
 
-## 5. Changing Voice/Speed Mid-Workflow
+## 4. Changing Voice or Speed
 
-**Via MCP tool parameters:** Agents can pass `voice` and `speed` to the speak tool directly. Update your agent's prompt to specify preferred voice/speed.
+Agents pass `voice` and `speed` as parameters to the speak tool. Update your agent's prompt to specify preferences:
 
-**Via config file (CLI only):** Edit `~/.config/speaker/config.yaml` — changes take effect on the next `speak` CLI call (no restart needed).
-
-```yaml
-tts:
-  voice: af_heart    # was am_michael
-  speed: 1.2         # was 1.0
+```
+When voice is enabled, call the speak tool with voice="af_heart" and speed=1.2.
 ```
 
-Or override per-call with CLI flags:
-```bash
-speak "Quick test" -v bf_emma -s 1.5
-```
+Available voices: `am_michael` (default), `af_heart`, `af_bella`, `am_adam`, `bf_emma`.
+
+Speed range: 0.5 (slow) to 2.0 (fast), default 1.0.
 
 ## Agent -> Speak Flow
 

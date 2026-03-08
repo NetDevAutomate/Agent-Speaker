@@ -20,7 +20,7 @@ cd speaker
 ./scripts/install.sh
 ```
 
-This installs the `speak` CLI, the `speak-mcp` MCP server, and configures any detected AI tools.
+This installs the `speak-mcp` MCP server and configures any detected AI tools.
 
 ## Usage
 
@@ -36,23 +36,9 @@ In any agent session:
 
 Voice is off by default. When enabled, the agent calls the `speak` MCP tool with its full response (excluding code blocks).
 
-## CLI
-
-The `speak` CLI is also available standalone:
-
-```bash
-speak "Hello, can you hear me?"          # Speak text
-speak -                                   # Read from stdin
-speak "text" -v af_heart                  # Different voice
-speak "text" -s 1.2                       # Faster
-speak "text" -b macos                     # macOS say fallback
-```
-
 ## MCP Server
 
-All agent integrations use the `speak-mcp` entry point, which runs a [FastMCP](https://github.com/jlowin/fastmcp) server exposing a single `speak` tool.
-
-The server keeps the Kokoro model warm in memory — first call loads the model (~2s), subsequent calls have ~200ms overhead.
+The `speak-mcp` entry point runs a [FastMCP](https://github.com/jlowin/fastmcp) server exposing a single `speak` tool. The Kokoro model stays warm in memory — first call loads the model (~2s), subsequent calls have ~200ms overhead.
 
 ### Tool Schema
 
@@ -64,7 +50,7 @@ The server keeps the Kokoro model warm in memory — first call loads the model 
 
 ### Adding to Any Agent
 
-Any MCP-compatible agent can use speaker. Add to your agent's MCP config:
+Add to your agent's MCP config:
 
 ```json
 {
@@ -86,19 +72,21 @@ Exclude code blocks from spoken text.
 
 See [docs/agent-install.md](docs/agent-install.md) for platform-specific configs.
 
-## Configuration
+### Voices
 
-`~/.config/speaker/config.yaml`:
+kokoro-onnx voices follow the pattern `{accent}{gender}_{name}`:
 
-```yaml
-tts:
-  voice: am_michael      # am_michael, af_heart, bf_emma, etc.
-  speed: 1.0             # 0.5 = slow, 2.0 = fast
-  backend: kokoro        # kokoro | macos
-  macos_voice: Samantha  # fallback voice
-```
+| Voice | Description |
+|-------|-------------|
+| `am_michael` | American male (default) — clear, natural |
+| `af_heart` | American female — warm tone |
+| `af_bella` | American female — bright |
+| `am_adam` | American male — deeper |
+| `bf_emma` | British female |
 
-See [docs/configuration.md](docs/configuration.md) for all options.
+### Speed
+
+Pass `speed` as a tool parameter (0.5 = slow, 2.0 = fast, default 1.0).
 
 ## How It Works
 
@@ -106,7 +94,6 @@ See [docs/configuration.md](docs/configuration.md) for all options.
 2. MCP server (`speak-mcp`) synthesizes audio via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)
 3. Audio resampled 24kHz->48kHz and played via sounddevice
 4. Model stays warm in memory for low-latency subsequent calls
-5. Falls back to macOS `say` if kokoro is unavailable
 
 ## Architecture
 

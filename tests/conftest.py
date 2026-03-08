@@ -10,16 +10,6 @@ import pytest
 
 
 @pytest.fixture()
-def tmp_config(tmp_path):
-    """Create a temporary config.yaml with test values."""
-    config = tmp_path / "config.yaml"
-    config.write_text(
-        "tts:\n  voice: af_heart\n  speed: 1.2\n  backend: kokoro\n  macos_voice: Daniel\n"
-    )
-    return config
-
-
-@pytest.fixture()
 def mock_kokoro(monkeypatch):
     """Patch kokoro_onnx.Kokoro to return fake samples."""
     fake_samples = np.zeros(4800, dtype=np.float32)
