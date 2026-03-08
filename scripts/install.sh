@@ -38,8 +38,10 @@ fi
 if [ -d "$HOME/.claude" ]; then
   echo ""
   echo "=== Installing Claude Code agent ==="
-  link_file "$REPO_DIR/agents/claude/speaker.md" "$HOME/.claude/speaker.md"
-  info "Claude Code: add to .claude/settings.json allowedTools or use /read speaker.md"
+  mkdir -p "$HOME/.claude/commands"
+  link_file "$REPO_DIR/agents/claude/commands/speak-start.md" "$HOME/.claude/commands/speak-start.md"
+  link_file "$REPO_DIR/agents/claude/commands/speak-stop.md" "$HOME/.claude/commands/speak-stop.md"
+  info "Claude Code: use /speak-start and /speak-stop"
 fi
 
 # Gemini CLI
