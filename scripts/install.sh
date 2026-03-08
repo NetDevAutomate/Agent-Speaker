@@ -19,15 +19,31 @@ link_file() {
   info "Linked: $(basename "$target")"
 }
 
-copy_json() {
+merge_mcp_json() {
+  # Merge speaker MCP server entry into an existing mcp.json, or create it.
+  # Uses python3 (guaranteed available since we're installing a Python tool).
   local src="$1" target="$2"
   mkdir -p "$(dirname "$target")"
-  cp "$src" "$target"
-  info "Installed: $(basename "$target")"
+  if [ -f "$target" ]; then
+    python3 -c "
+import json, sys
+existing = json.loads(open('$target').read())
+speaker = json.loads(open('$src').read())
+servers = existing.setdefault('mcpServers', {})
+servers.update(speaker.get('mcpServers', {}))
+with open('$target', 'w') as f:
+    json.dump(existing, f, indent=2)
+    f.write('\n')
+"
+    info "Merged speaker into existing $(basename "$target")"
+  else
+    cp "$src" "$target"
+    info "Installed: $(basename "$target")"
+  fi
 }
 
-# Install CLI tool + MCP server entry point
-echo "=== Installing speak CLI and MCP server ==="
+# Install MCP server entry point
+echo "=== Installing speak-mcp server ==="
 uv tool install "${REPO_DIR}[mcp]" --force 2>&1 | tail -1
 
 # Kiro CLI
@@ -46,7 +62,7 @@ if [ -d "$HOME/.claude" ]; then
   mkdir -p "$HOME/.claude/commands"
   link_file "$REPO_DIR/agents/claude/commands/speak-start.md" "$HOME/.claude/commands/speak-start.md"
   link_file "$REPO_DIR/agents/claude/commands/speak-stop.md" "$HOME/.claude/commands/speak-stop.md"
-  copy_json "$REPO_DIR/agents/claude/mcp.json" "$HOME/.claude/mcp.json"
+  merge_mcp_json "$REPO_DIR/agents/claude/mcp.json" "$HOME/.claude/mcp.json"
   link_file "$REPO_DIR/agents/claude/speaker.md" "$HOME/.claude/speaker.md"
   info "Claude Code: use /speak-start and /speak-stop"
 fi
@@ -56,7 +72,7 @@ if [ -d "$HOME/.gemini" ]; then
   echo ""
   echo "=== Installing Gemini CLI agent ==="
   mkdir -p "$HOME/.gemini"
-  copy_json "$REPO_DIR/agents/gemini/mcp.json" "$HOME/.gemini/mcp.json"
+  merge_mcp_json "$REPO_DIR/agents/gemini/mcp.json" "$HOME/.gemini/mcp.json"
   info "Gemini: @speak-start / @speak-stop in any session"
 fi
 
@@ -69,9 +85,3 @@ echo ""
 echo "Usage in any agent session:"
 echo "  @speak-start    Enable voice output"
 echo "  @speak-stop     Disable voice output"
-echo ""
-echo "Config: ~/.config/speaker/config.yaml"
-echo "  tts:"
-echo "    voice: am_michael"
-echo "    speed: 1.0"
-echo "    backend: kokoro"

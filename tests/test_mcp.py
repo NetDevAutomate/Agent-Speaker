@@ -38,6 +38,10 @@ class TestMCPSpeak:
         assert "Spoke:" in result
         assert len(result) < 200
 
+    def test_short_text_no_ellipsis(self, mock_kokoro, mock_sounddevice):
+        result = speak("short")
+        assert "Spoke: short" == result
+
     def test_voice_and_speed_params(self, mock_kokoro, mock_sounddevice):
         result = speak("test", voice="af_heart", speed=1.5)
         assert "Spoke:" in result
@@ -50,3 +54,48 @@ class TestMCPSpeak:
         mock_kokoro.create.assert_called_once_with(
             "test", voice="am_michael", speed=1.0, lang="en-us"
         )
+
+
+class TestInputValidation:
+    def setup_method(self):
+        mcp_server._engine = SpeakerEngine()
+
+    def test_invalid_voice_rejected(self):
+        result = speak("hello", voice="../../etc/passwd")
+        assert "Invalid voice" in result
+
+    def test_invalid_voice_with_spaces(self):
+        result = speak("hello", voice="Samantha -o /tmp/evil")
+        assert "Invalid voice" in result
+
+    def test_invalid_voice_uppercase(self):
+        result = speak("hello", voice="AM_MICHAEL")
+        assert "Invalid voice" in result
+
+    def test_valid_voice_accepted(self, mock_kokoro, mock_sounddevice):
+        result = speak("hello", voice="bf_emma")
+        assert "Spoke:" in result
+
+    def test_speed_clamped_high(self, mock_kokoro, mock_sounddevice):
+        speak("test", speed=5.0)
+        mock_kokoro.create.assert_called_once_with(
+            "test", voice="am_michael", speed=2.0, lang="en-us"
+        )
+
+    def test_speed_clamped_low(self, mock_kokoro, mock_sounddevice):
+        speak("test", speed=0.1)
+        mock_kokoro.create.assert_called_once_with(
+            "test", voice="am_michael", speed=0.5, lang="en-us"
+        )
+
+    def test_text_truncated_at_limit(self, mock_kokoro, mock_sounddevice):
+        huge_text = "a" * 20_000
+        speak(huge_text)
+        actual_text = mock_kokoro.create.call_args[0][0]
+        assert len(actual_text) == 10_000
+
+    def test_text_under_limit_not_truncated(self, mock_kokoro, mock_sounddevice):
+        text = "a" * 5000
+        speak(text)
+        actual_text = mock_kokoro.create.call_args[0][0]
+        assert len(actual_text) == 5000
