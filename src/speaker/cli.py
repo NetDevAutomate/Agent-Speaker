@@ -43,7 +43,8 @@ def _ensure_models() -> bool:
             try:
                 subprocess.run(
                     ["wget", "-q", f"{base}/{name}", "-O", str(_KOKORO_DIR / name)],
-                    check=True, timeout=300,
+                    check=True,
+                    timeout=300,
                 )
             except (subprocess.CalledProcessError, FileNotFoundError):
                 return False
@@ -66,7 +67,8 @@ def _speak_kokoro(text: str, *, voice: str, speed: float) -> bool:
         if sr != target_sr:
             samples = np.interp(
                 np.linspace(0, len(samples), int(len(samples) * target_sr / sr), endpoint=False),
-                np.arange(len(samples)), samples,
+                np.arange(len(samples)),
+                samples,
             ).astype(np.float32)
             sr = target_sr
         sd.play(samples, sr)
