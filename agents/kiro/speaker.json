@@ -1,0 +1,15 @@
+{
+  "name": "speaker",
+  "description": "Voice output for AI agents — speak responses aloud using high-quality local TTS",
+  "prompt": "file://speaker/persona.md",
+  "resources": ["file://speaker/persona.md"],
+  "tools": ["@builtin", "@speaker"],
+  "mcpServers": {
+    "speaker": {
+      "command": "uvx",
+      "args": ["--from", "mcp[cli]", "mcp", "run", "~/.kiro/agents/mcp/speaker-server.py"],
+      "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
+    }
+  },
+  "allowedTools": ["mcp_speaker_speak"]
+}

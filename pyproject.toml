@@ -1,0 +1,34 @@
+[project]
+name = "speaker"
+version = "0.1.0"
+description = "High-quality local TTS for AI coding agents — speak responses aloud via kokoro-onnx"
+authors = [{name = "Andy Taylor"}]
+requires-python = ">=3.10"
+license = "MIT"
+readme = "README.md"
+keywords = ["tts", "kokoro", "mcp", "kiro", "claude", "speech"]
+dependencies = [
+    "typer>=0.9.0",
+    "kokoro-onnx>=0.4.0",
+    "sounddevice>=0.5.0",
+    "numpy>=1.24.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+speak = "speaker.cli:main"
+
+[project.optional-dependencies]
+mcp = ["mcp[cli]>=1.0.0"]
+dev = ["pytest>=7.4.0", "ruff>=0.1.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/speaker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
