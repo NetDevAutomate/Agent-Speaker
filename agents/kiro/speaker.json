@@ -6,8 +6,8 @@
   "tools": ["@builtin", "@speaker"],
   "mcpServers": {
     "speaker": {
-      "command": "uvx",
-      "args": ["--from", "mcp[cli]", "mcp", "run", "~/.kiro/agents/mcp/speaker-server.py"],
+      "command": "speak-mcp",
+      "args": [],
       "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
     }
   },

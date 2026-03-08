@@ -1,8 +1,10 @@
 # Speaker
 
-> 🔊 High-quality local TTS for AI coding agents — speak responses aloud
+> Local TTS for AI coding agents — speak responses aloud
 
-Adds voice output to any AI coding agent (Kiro CLI, Claude Code, Gemini CLI, OpenCode, Amp, Crush). Uses [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) (82M params) for fast, natural-sounding speech with ~1.5s latency.
+Adds voice output to any AI coding agent (Claude Code, Kiro CLI, Gemini CLI, OpenCode, Crush, Amp). Uses [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) (82M params) for fast, natural-sounding speech with ~1.5s latency.
+
+All agents integrate via an [MCP](https://modelcontextprotocol.io/) server that exposes a `speak` tool. The Kokoro model loads once and stays warm in memory, eliminating cold-start latency on subsequent calls.
 
 ## Why?
 
@@ -18,7 +20,7 @@ cd speaker
 ./scripts/install.sh
 ```
 
-This installs the `speak` CLI and configures any detected AI tools.
+This installs the `speak` CLI, the `speak-mcp` MCP server, and configures any detected AI tools.
 
 ## Usage
 
@@ -26,15 +28,17 @@ In any agent session:
 
 | Platform | Enable | Disable |
 |----------|--------|---------|
-| Kiro CLI | `@speak-start` | `@speak-stop` |
 | Claude Code | `/speak-start` | `/speak-stop` |
+| Kiro CLI | `@speak-start` | `@speak-stop` |
 | Gemini CLI | `@speak-start` | `@speak-stop` |
 | OpenCode | `@speak-start` | `@speak-stop` |
 | Amp | `@speak-start` | `@speak-stop` |
 
-Voice is off by default. When enabled, the agent speaks its full response (excluding code blocks).
+Voice is off by default. When enabled, the agent calls the `speak` MCP tool with its full response (excluding code blocks).
 
 ## CLI
+
+The `speak` CLI is also available standalone:
 
 ```bash
 speak "Hello, can you hear me?"          # Speak text
@@ -43,6 +47,44 @@ speak "text" -v af_heart                  # Different voice
 speak "text" -s 1.2                       # Faster
 speak "text" -b macos                     # macOS say fallback
 ```
+
+## MCP Server
+
+All agent integrations use the `speak-mcp` entry point, which runs a [FastMCP](https://github.com/jlowin/fastmcp) server exposing a single `speak` tool.
+
+The server keeps the Kokoro model warm in memory — first call loads the model (~2s), subsequent calls have ~200ms overhead.
+
+### Tool Schema
+
+| Field | Value |
+|-------|-------|
+| Name | `speak` |
+| Parameters | `text: str`, `voice: str = "am_michael"`, `speed: float = 1.0` |
+| Returns | `str` — confirmation or error message |
+
+### Adding to Any Agent
+
+Any MCP-compatible agent can use speaker. Add to your agent's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Then add to the agent's prompt:
+```
+The user can toggle voice with @speak-start and @speak-stop.
+When enabled, call the speak tool with your full response text.
+Exclude code blocks from spoken text.
+```
+
+See [docs/agent-install.md](docs/agent-install.md) for platform-specific configs.
 
 ## Configuration
 
@@ -56,49 +98,29 @@ tts:
   macos_voice: Samantha  # fallback voice
 ```
 
-## Adding to Any Existing Agent
-
-### Kiro CLI
-
-Add to your agent's JSON config:
-
-```json
-{
-  "tools": ["@builtin", "@speaker"],
-  "mcpServers": {
-    "speaker": {
-      "command": "uvx",
-      "args": ["--from", "mcp[cli]", "mcp", "run", "~/.kiro/agents/mcp/speaker-server.py"],
-      "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
-    }
-  }
-}
-```
-
-And add to the agent's persona/prompt:
-
-```
-The user can toggle voice with @speak-start and @speak-stop.
-When enabled, call the speak tool with your full response text.
-```
-
-### Claude Code / Gemini / Others
-
-Add to the agent's system prompt:
-
-```
-The user can toggle voice with @speak-start and @speak-stop (or /speak-start /speak-stop).
-When enabled, run: ~/.local/bin/speak "your response text"
-Exclude code blocks from spoken text.
-```
+See [docs/configuration.md](docs/configuration.md) for all options.
 
 ## How It Works
 
-1. `speak` CLI wraps [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) — an 82M parameter ONNX TTS model
-2. Models auto-download on first run (~337MB to `~/.cache/kokoro-onnx/`)
-3. Audio resampled 24kHz→48kHz to prevent crackling on some devices
-4. MCP server exposes `speak()` as a native tool for Kiro CLI
-5. Other agents call the CLI directly via shell
+1. Agent calls the `speak` MCP tool with response text
+2. MCP server (`speak-mcp`) synthesizes audio via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)
+3. Audio resampled 24kHz->48kHz and played via sounddevice
+4. Model stays warm in memory for low-latency subsequent calls
+5. Falls back to macOS `say` if kokoro is unavailable
+
+## Architecture
+
+```
+Agent (Claude/Kiro/Gemini/...)
+  |
+  | MCP protocol (stdio)
+  v
+speak-mcp (FastMCP server)
+  |
+  | SpeakerEngine (in-process)
+  v
+kokoro-onnx -> sounddevice -> audio out
+```
 
 ## Requirements
 

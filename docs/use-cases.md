@@ -1,6 +1,33 @@
 # Use Cases & How-To
 
-## 1. Enable Voice in a Kiro CLI Session
+## 1. Enable Voice in Claude Code
+
+Toggle voice output during any Claude Code session.
+
+**Steps:**
+
+1. Ensure MCP config is installed (install.sh does this):
+   ```bash
+   cat ~/.claude/mcp.json  # should contain speaker MCP config
+   ```
+2. Start Claude Code
+3. Type `/speak-start` to enable voice
+4. The agent calls the `speak` MCP tool after each response
+5. Type `/speak-stop` to disable
+
+**Example:**
+```
+You: /speak-start
+Claude: Voice enabled. I'll speak my responses aloud from now on.
+
+You: Explain Python generators
+Claude: [explains generators — text spoken aloud via MCP tool]
+
+You: /speak-stop
+Claude: Voice disabled.
+```
+
+## 2. Enable Voice in Kiro CLI
 
 Toggle voice output during any Kiro CLI agent session.
 
@@ -18,38 +45,12 @@ Toggle voice output during any Kiro CLI agent session.
 ```
 You: @speak-start
 Agent: Voice enabled. I'll speak my responses aloud from now on.
-🔊 Spoke: Voice enabled. I'll speak my responses aloud from now on.
 
 You: Explain Python generators
 Agent: [explains generators — text spoken aloud automatically]
 
 You: @speak-stop
 Agent: Voice disabled.
-```
-
-## 2. Enable Voice in Claude Code
-
-Toggle voice in a Claude Code session.
-
-**Steps:**
-
-1. Ensure `~/.claude/speaker.md` exists (install.sh creates it)
-2. Start Claude Code and load the prompt:
-   ```
-   /read ~/.claude/speaker.md
-   ```
-3. Type `/speak-start` to enable voice
-4. Claude runs `~/.local/bin/speak "response text"` after each reply
-5. Type `/speak-stop` to disable
-
-**Example:**
-```
-You: /speak-start
-Claude: Voice enabled.
-> Running: ~/.local/bin/speak "Voice enabled."
-
-You: /speak-stop
-Claude: Voice disabled.
 ```
 
 ## 3. Standalone CLI Usage
@@ -92,21 +93,19 @@ fi
 
 ## 4. Adding Speaker to an Existing Custom Agent
 
-You have a Kiro agent and want to add voice support.
+You have an AI agent and want to add voice support.
 
 **Steps:**
 
-1. Add the MCP server to your agent's JSON config:
+1. Add the MCP server to your agent's config:
    ```json
    {
      "mcpServers": {
        "speaker": {
-         "command": "uvx",
-         "args": ["--from", "mcp[cli]", "mcp", "run", "~/.kiro/agents/mcp/speaker-server.py"],
-         "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
+         "command": "speak-mcp",
+         "args": []
        }
-     },
-     "allowedTools": ["mcp_speaker_speak"]
+     }
    }
    ```
 
@@ -117,45 +116,32 @@ You have a Kiro agent and want to add voice support.
    Exclude code blocks from spoken text.
    ```
 
-3. Merge `"@speaker"` into your `tools` array if using tool groups.
-
-For Claude Code / Gemini / shell-based agents, add to the system prompt:
-```markdown
-When voice is enabled, run: ~/.local/bin/speak "your response text"
-```
+3. For Kiro agents, add `"mcp_speaker_speak"` to `allowedTools`.
 
 ## 5. Changing Voice/Speed Mid-Workflow
 
-Edit `~/.config/speaker/config.yaml` — changes take effect on the next `speak` call (no restart needed).
+**Via MCP tool parameters:** Agents can pass `voice` and `speed` to the speak tool directly. Update your agent's prompt to specify preferred voice/speed.
 
-**Steps:**
+**Via config file (CLI only):** Edit `~/.config/speaker/config.yaml` — changes take effect on the next `speak` CLI call (no restart needed).
 
-1. Edit the config:
-   ```bash
-   vim ~/.config/speaker/config.yaml
-   ```
+```yaml
+tts:
+  voice: af_heart    # was am_michael
+  speed: 1.2         # was 1.0
+```
 
-2. Change voice or speed:
-   ```yaml
-   tts:
-     voice: af_heart    # was am_michael
-     speed: 1.2         # was 1.0
-   ```
-
-3. Next `speak` call uses the new settings.
-
-Or override per-call with CLI flags (no config edit needed):
+Or override per-call with CLI flags:
 ```bash
 speak "Quick test" -v bf_emma -s 1.5
 ```
 
-## Agent → Speak Flow
+## Agent -> Speak Flow
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Agent as AI Agent
-    participant Tool as speak tool
+    participant MCP as speak MCP tool
     participant Audio as Speaker
 
     User->>Agent: @speak-start
@@ -164,10 +150,10 @@ sequenceDiagram
     User->>Agent: "Explain X"
     Agent->>Agent: Generate response text
     Agent->>User: Display response
-    Agent->>Tool: speak("Explanation of X...")
-    Tool->>Audio: TTS → play audio
-    Audio-->>Tool: done
-    Tool-->>Agent: "🔊 Spoke: Explanation of X..."
+    Agent->>MCP: speak(text="Explanation of X...", voice="am_michael")
+    MCP->>Audio: TTS -> play audio
+    Audio-->>MCP: done
+    MCP-->>Agent: "Spoke: Explanation of X..."
 
     User->>Agent: @speak-stop
     Agent->>Agent: Remember: voice = off

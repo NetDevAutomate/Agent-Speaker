@@ -32,13 +32,14 @@ flowchart TD
 ```bash
 # Check if it's installed
 ls ~/.local/bin/speak
+ls ~/.local/bin/speak-mcp
 
 # Add to PATH (add to ~/.zshrc)
 export PATH="$HOME/.local/bin:$PATH"
 
 # Or reinstall
 cd ~/code/personal/tools/speaker
-uv tool install . --force
+uv tool install .[mcp] --force
 ```
 
 ## No Sound Output
@@ -78,7 +79,7 @@ If this works, the issue is kokoro-specific.
 
 **Symptom:** Audio plays but sounds distorted or crackly.
 
-**Cause:** kokoro-onnx outputs 24kHz audio. Some audio devices (especially Bluetooth/AirPlay) expect 48kHz. The CLI resamples to 48kHz to fix this.
+**Cause:** kokoro-onnx outputs 24kHz audio. Some audio devices (especially Bluetooth/AirPlay) expect 48kHz. The engine resamples to 48kHz to fix this.
 
 If you still hear crackling:
 ```bash
@@ -86,7 +87,7 @@ If you still hear crackling:
 python3 -c "import sounddevice; print(sounddevice.query_devices(kind='output'))"
 ```
 
-The resampling in cli.py uses linear interpolation (`np.interp`). This handles the 24→48kHz case well. If your device uses a different rate, the code targets 48kHz hardcoded.
+The resampling in `engine.py` uses linear interpolation (`np.interp`). This handles the 24->48kHz case well. If your device uses a different rate, the code targets 48kHz hardcoded.
 
 ## AirPlay Latency
 
@@ -99,40 +100,46 @@ The resampling in cli.py uses linear interpolation (`np.interp`). This handles t
 - Prefix text with a pause: `speak "... Your actual text here"` (the ellipsis generates a brief pause)
 - For longer text, this isn't noticeable
 
-## MCP Server Not Showing in `/tools`
+## MCP Server Not Working
 
-**Symptom:** Kiro CLI doesn't list the speak tool.
+**Symptom:** Agent doesn't have the speak tool available.
 
-**Check 1 — Agent config:**
+**Check 1 — speak-mcp is installed:**
+```bash
+which speak-mcp
+# Should show ~/.local/bin/speak-mcp
+```
+
+If missing, reinstall:
+```bash
+cd ~/code/personal/tools/speaker
+uv tool install .[mcp] --force
+```
+
+**Check 2 — MCP config exists:**
+
+For Claude Code:
+```bash
+cat ~/.claude/mcp.json
+# Should contain: "speaker": { "command": "speak-mcp" }
+```
+
+For Kiro CLI:
 ```bash
 cat ~/.kiro/agents/speaker.json
-```
-
-Verify `mcpServers.speaker` exists and the path to `speaker-server.py` is correct.
-
-**Check 2 — Server file exists:**
-```bash
-ls ~/.kiro/agents/mcp/speaker-server.py
-```
-
-If it's a broken symlink, re-run:
-```bash
-./scripts/install.sh
+# Should contain mcpServers.speaker
 ```
 
 **Check 3 — Test the server manually:**
 ```bash
-uvx --from "mcp[cli]" mcp run ~/.kiro/agents/mcp/speaker-server.py
+speak-mcp
+# Should start on stdio waiting for MCP messages
+# Ctrl+C to exit
 ```
 
-If it errors, check that `mcp[cli]` is installable:
-```bash
-uvx --from "mcp[cli]" mcp --help
-```
+**Check 4 — Kiro allowedTools:**
 
-**Check 4 — allowedTools:**
-
-The agent JSON needs `"mcp_speaker_speak"` in `allowedTools`. Without it, the tool exists but the agent can't call it.
+Kiro agents need `"mcp_speaker_speak"` in `allowedTools`. Without it, the tool exists but the agent can't call it.
 
 ## Slow Generation
 
@@ -142,7 +149,8 @@ The agent JSON needs `"mcp_speaker_speak"` in `allowedTools`. Without it, the to
 
 **Mitigations:**
 - Keep spoken text short — agents should exclude code blocks
-- The model is 82M params, so generation is typically fast (~1.5s for a sentence)
+- First call loads the model (~2s), subsequent calls are faster (~200ms overhead)
+- The MCP server keeps the model warm in memory between calls
 - Very long text (paragraphs) will take several seconds
 
 ## Model Download Fails

@@ -2,61 +2,51 @@
 
 from __future__ import annotations
 
-import subprocess
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
-# Import the speak function directly from the server module
-import importlib.util
-
-_SERVER_PATH = Path(__file__).parent.parent / "agents" / "mcp" / "speaker-server.py"
-
-
-@pytest.fixture()
-def speak_fn():
-    """Import speak function from the MCP server script."""
-    spec = importlib.util.spec_from_file_location("speaker_server", _SERVER_PATH)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.speak
-
-
-@pytest.fixture()
-def speak_bin():
-    """Import _SPEAK_BIN from the MCP server script."""
-    spec = importlib.util.spec_from_file_location("speaker_server", _SERVER_PATH)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod._SPEAK_BIN
+from speaker import mcp_server
+from speaker.engine import SpeakerEngine
+from speaker.mcp_server import speak
 
 
 class TestMCPSpeak:
-    def test_success(self, speak_fn):
-        with patch("subprocess.run") as mock_run:
-            result = speak_fn("hello world")
-            assert "🔊 Spoke:" in result
-            assert "hello world" in result
-            mock_run.assert_called_once()
+    def setup_method(self):
+        """Reset module-level engine between tests."""
+        mcp_server._engine = SpeakerEngine()
 
-    def test_failure(self, speak_fn):
-        with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "speak")):
-            result = speak_fn("hello")
+    def test_success(self, mock_kokoro, mock_sounddevice):
+        result = speak("hello world")
+        assert "Spoke:" in result
+        assert "hello world" in result
+
+    def test_empty_text(self):
+        result = speak("")
+        assert "No text" in result
+
+    def test_whitespace_only(self):
+        result = speak("   ")
+        assert "No text" in result
+
+    def test_failure(self):
+        with patch.object(SpeakerEngine, "speak", return_value=False):
+            result = speak("hello")
             assert "TTS failed" in result
 
-    def test_timeout(self, speak_fn):
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("speak", 120)):
-            result = speak_fn("hello")
-            assert "TTS failed" in result
+    def test_truncates_long_text_in_response(self, mock_kokoro, mock_sounddevice):
+        long_text = "x" * 200
+        result = speak(long_text)
+        assert "Spoke:" in result
+        assert len(result) < 200
 
-    def test_not_found(self, speak_fn):
-        with patch("subprocess.run", side_effect=FileNotFoundError("speak not found")):
-            result = speak_fn("hello")
-            assert "TTS failed" in result
+    def test_voice_and_speed_params(self, mock_kokoro, mock_sounddevice):
+        result = speak("test", voice="af_heart", speed=1.5)
+        assert "Spoke:" in result
+        mock_kokoro.create.assert_called_once_with(
+            "test", voice="af_heart", speed=1.5, lang="en-us"
+        )
 
-    def test_speak_bin_path(self, speak_bin):
-        expected = Path.home() / ".local" / "bin" / "speak"
-        assert speak_bin == expected
+    def test_default_voice_and_speed(self, mock_kokoro, mock_sounddevice):
+        speak("test")
+        mock_kokoro.create.assert_called_once_with(
+            "test", voice="am_michael", speed=1.0, lang="en-us"
+        )

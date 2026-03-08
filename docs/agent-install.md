@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Install the `speak` CLI first:
+Install the `speak` CLI and `speak-mcp` MCP server:
 ```bash
 cd ~/code/personal/tools/speaker
 uv tool install .[mcp] --force
@@ -10,7 +10,8 @@ uv tool install .[mcp] --force
 
 Verify:
 ```bash
-speak "test"
+speak "test"          # CLI works
+which speak-mcp       # MCP server installed
 ```
 
 ## Install Script
@@ -24,47 +25,45 @@ The easiest path — auto-detects installed AI tools:
 flowchart TD
     A[install.sh] --> B[uv tool install speaker]
     B --> C{~/.kiro exists?}
-    C -->|yes| D[Symlink agent JSON + persona + MCP server]
+    C -->|yes| D[Symlink Kiro agent config]
     C -->|no| E{~/.claude exists?}
     D --> E
-    E -->|yes| F[Symlink speaker.md]
+    E -->|yes| F[Install MCP config + slash commands]
     E -->|no| G{~/.gemini exists?}
     F --> G
-    G -->|yes| H[Symlink speaker.md]
+    G -->|yes| H[Install MCP config]
     G -->|no| I[Done]
     H --> I
 ```
 
-## File Locations Per Platform
+## How All Agents Connect
+
+Every agent uses the same MCP server (`speak-mcp`). The only difference is where each agent stores its MCP config.
 
 ```mermaid
 graph LR
-    subgraph "Source (repo)"
-        S1[agents/kiro/speaker.json]
-        S2[agents/kiro/speaker/persona.md]
-        S3[agents/mcp/speaker-server.py]
-        S4[agents/claude/speaker.md]
+    subgraph "Agents"
+        K[Kiro CLI]
+        C[Claude Code]
+        G[Gemini CLI]
+        O[OpenCode]
+        CR[Crush]
     end
 
-    subgraph "Kiro CLI"
-        K1[~/.kiro/agents/speaker.json]
-        K2[~/.kiro/agents/speaker/persona.md]
-        K3[~/.kiro/agents/mcp/speaker-server.py]
+    subgraph "MCP Server"
+        S[speak-mcp]
     end
 
-    subgraph "Claude Code"
-        C1[~/.claude/speaker.md]
+    subgraph "Engine"
+        E[SpeakerEngine<br/>kokoro-onnx]
     end
 
-    subgraph "Gemini CLI"
-        G1[~/.gemini/speaker.md]
-    end
-
-    S1 -.->|symlink| K1
-    S2 -.->|symlink| K2
-    S3 -.->|symlink| K3
-    S4 -.->|symlink| C1
-    S4 -.->|symlink| G1
+    K -->|MCP stdio| S
+    C -->|MCP stdio| S
+    G -->|MCP stdio| S
+    O -->|MCP stdio| S
+    CR -->|MCP stdio| S
+    S --> E
 ```
 
 ## Kiro CLI
@@ -72,9 +71,8 @@ graph LR
 The install script handles this, but here's the manual setup.
 
 **Files needed:**
-- `~/.kiro/agents/speaker.json` — agent definition
+- `~/.kiro/agents/speaker.json` — agent definition with MCP server config
 - `~/.kiro/agents/speaker/persona.md` — system prompt
-- `~/.kiro/agents/mcp/speaker-server.py` — MCP server
 
 **speaker.json:**
 ```json
@@ -86,8 +84,8 @@ The install script handles this, but here's the manual setup.
   "tools": ["@builtin", "@speaker"],
   "mcpServers": {
     "speaker": {
-      "command": "uvx",
-      "args": ["--from", "mcp[cli]", "mcp", "run", "~/.kiro/agents/mcp/speaker-server.py"],
+      "command": "speak-mcp",
+      "args": [],
       "env": {"FASTMCP_LOG_LEVEL": "ERROR"}
     }
   },
@@ -104,72 +102,124 @@ kiro-cli chat --agent speaker
 
 ## Claude Code
 
-**File needed:**
-- `~/.claude/speaker.md` — prompt with voice toggle instructions
+**Files needed:**
+- `~/.claude/mcp.json` — MCP server config
+- `~/.claude/commands/speak-start.md` — slash command to enable voice
+- `~/.claude/commands/speak-stop.md` — slash command to disable voice
+- `~/.claude/speaker.md` — system prompt with voice toggle instructions
 
-**speaker.md:**
-```markdown
-You have a voice output tool. The user controls it with:
-- `/speak-start` — enable voice
-- `/speak-stop` — disable voice
-
-Voice is off by default. When enabled, run this after each response:
-~/.local/bin/speak "Your full response text here"
-
-Exclude code blocks from spoken text. If the command fails, continue without voice.
-```
-
-**Usage:** Load the prompt in a session:
-```
-/read ~/.claude/speaker.md
-```
-
-Or add to your project's `.claude/commands/` for automatic loading.
-
-## OpenCode
-
-Add to your OpenCode agent config (typically `~/.config/opencode/agents.json`):
-
+**mcp.json:**
 ```json
 {
-  "study-mentor": {
-    "system_prompt_append": "The user can toggle voice with @speak-start and @speak-stop. When enabled, run: ~/.local/bin/speak \"your response text\". Exclude code blocks."
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
   }
 }
 ```
 
-OpenCode agents use shell commands, so the CLI is called directly — no MCP server needed.
-
-## Crush
-
-Same pattern as Claude Code — Crush agents execute shell commands.
-
-Add to your Crush agent prompt:
+**speaker.md** (loaded as context):
 ```markdown
-The user can toggle voice with @speak-start and @speak-stop.
-When enabled, run: ~/.local/bin/speak "your response text"
+You have a voice output tool via MCP. The user controls it with:
+- /speak-start — enable voice
+- /speak-stop — disable voice
+
+Voice is off by default.
+When enabled, call the speak MCP tool after each response with your full response text.
 Exclude code blocks from spoken text.
+```
+
+**Usage:** In any Claude Code session:
+```
+/speak-start
 ```
 
 ## Gemini CLI
 
-The install script symlinks `speaker.md` to `~/.gemini/speaker.md`. Gemini auto-loads subagent files from that directory.
+**File needed:**
+- `~/.gemini/mcp.json` — MCP server config
+
+**mcp.json:**
+```json
+{
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
+  }
+}
+```
 
 **Usage:** In any Gemini session:
 ```
 @speak-start
 ```
 
-Gemini calls the CLI directly via shell. No MCP server needed.
+## OpenCode
+
+**File needed:**
+- MCP config in your OpenCode settings (typically `~/.config/opencode/mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Add to your agent's system prompt:
+```
+The user can toggle voice with @speak-start and @speak-stop.
+When enabled, call the speak tool with your full response text.
+Exclude code blocks from spoken text.
+```
+
+## Crush
+
+**File needed:**
+- `crush.json` in your project root
+
+```json
+{
+  "$schema": "https://charm.land/crush.json",
+  "mcp": {
+    "speaker": {
+      "type": "stdio",
+      "command": "speak-mcp",
+      "args": [],
+      "timeout": 120
+    }
+  }
+}
+```
 
 ## Amp
 
-Amp reads `AGENTS.md` from the project root. Add a section:
+Amp supports MCP servers. Add to your Amp config:
 
+```json
+{
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+And add to `AGENTS.md` in the project root:
 ```markdown
 ## Voice Output
 
 The user can toggle voice with @speak-start and @speak-stop.
-When enabled, run: ~/.local/bin/speak "your response text"
+When enabled, call the speak tool with your full response text.
 Exclude code blocks from spoken text.
 ```

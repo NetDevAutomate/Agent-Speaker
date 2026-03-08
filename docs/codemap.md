@@ -1,6 +1,6 @@
 # Architecture & Code Map
 
-Speaker is a local TTS tool with three layers: a CLI that wraps kokoro-onnx, an MCP server that exposes the CLI as a tool, and agent configs that teach AI assistants how to use it.
+Speaker is a local TTS tool with three layers: a shared engine, an MCP server that exposes it as a tool, and agent configs that teach AI assistants how to use it. There is also a standalone CLI for direct use.
 
 ## Component Diagram
 
@@ -8,19 +8,24 @@ Speaker is a local TTS tool with three layers: a CLI that wraps kokoro-onnx, an 
 graph TB
     subgraph "Agent Layer"
         KA[Kiro CLI Agent<br/>speaker.json + persona.md]
-        CA[Claude Code Agent<br/>speaker.md]
-        GA[Gemini / Others<br/>shell command]
+        CA[Claude Code Agent<br/>mcp.json + speaker.md]
+        GA[Gemini CLI<br/>mcp.json]
+        OA[OpenCode / Crush / Amp<br/>mcp.json or config]
     end
 
-    subgraph "Bridge Layer"
-        MCP[speaker-server.py<br/>FastMCP server]
+    subgraph "MCP Server"
+        MCP[speak-mcp<br/>FastMCP server<br/>src/speaker/mcp_server.py]
     end
 
-    subgraph "CLI Layer"
-        CLI[cli.py<br/>typer app]
+    subgraph "CLI"
+        CLI[speak<br/>typer app<br/>src/speaker/cli.py]
     end
 
-    subgraph "Engine Layer"
+    subgraph "Engine"
+        ENG[SpeakerEngine<br/>src/speaker/engine.py]
+    end
+
+    subgraph "Backend"
         KO[kokoro-onnx<br/>82M ONNX TTS model]
         SD[sounddevice<br/>audio playback]
         SAY[macOS say<br/>fallback]
@@ -32,114 +37,126 @@ graph TB
     end
 
     KA -->|MCP protocol| MCP
-    CA -->|shell exec| CLI
-    GA -->|shell exec| CLI
-    MCP -->|subprocess| CLI
-    CLI --> KO
+    CA -->|MCP protocol| MCP
+    GA -->|MCP protocol| MCP
+    OA -->|MCP protocol| MCP
+    MCP --> ENG
+    CLI --> ENG
+    ENG --> KO
+    ENG --> SD
     CLI --> SAY
-    KO --> SD
-    CLI -.->|reads| CFG
     KO -.->|loads| MODEL
+    CLI -.->|reads| CFG
 ```
 
-## Data Flow
+## Data Flow (MCP)
 
 ```mermaid
 sequenceDiagram
     participant Agent as AI Agent
-    participant MCP as speaker-server.py
-    participant CLI as speak CLI
+    participant MCP as speak-mcp server
+    participant Engine as SpeakerEngine
     participant Kokoro as kokoro-onnx
     participant Audio as sounddevice
 
-    Agent->>MCP: speak(text="Hello world")
-    MCP->>CLI: subprocess: speak "Hello world"
-    CLI->>CLI: Load ~/.config/speaker/config.yaml
-    CLI->>Kokoro: create(text, voice, speed)
+    Agent->>MCP: MCP call: speak(text="Hello world")
+    MCP->>Engine: engine.speak("Hello world")
+    Note over Engine: Model loaded on first call,<br/>stays warm in memory
+    Engine->>Kokoro: create(text, voice, speed)
     Kokoro->>Kokoro: Generate samples (24kHz)
-    Kokoro-->>CLI: samples, sample_rate
-    CLI->>CLI: Resample 24kHz → 48kHz
-    CLI->>Audio: sd.play(samples, 48000)
-    Audio-->>CLI: sd.wait()
-    CLI-->>MCP: exit 0
-    MCP-->>Agent: "🔊 Spoke: Hello world..."
+    Kokoro-->>Engine: samples, sample_rate
+    Engine->>Engine: Resample 24kHz -> 48kHz
+    Engine->>Audio: sd.play(samples, 48000)
+    Audio-->>Engine: sd.wait()
+    Engine-->>MCP: True
+    MCP-->>Agent: "Spoke: Hello world..."
 ```
 
 ## Fallback Chain
 
 ```mermaid
 flowchart LR
-    A[speak called] --> B{backend=macos?}
+    A[speak CLI called] --> B{backend=macos?}
     B -->|yes| C[macOS say]
     B -->|no| D{kokoro succeeds?}
-    D -->|yes| E[✓ Audio plays]
+    D -->|yes| E[Audio plays]
     D -->|no| F[macOS say fallback]
-    C --> G[✓ Audio plays]
+    C --> G[Audio plays]
     F --> G
 ```
 
+Note: The macOS fallback only applies to the CLI. The MCP server uses the engine directly and reports failure to the agent if kokoro is unavailable.
+
 ## Module Breakdown
 
-### `src/speaker/cli.py` — TTS Engine + CLI
+### `src/speaker/engine.py` — TTS Engine
 
-The core module. A typer app with one command (`speak`) that:
+The core module. A `SpeakerEngine` class that:
+
+- Downloads kokoro-onnx model files on first use (~337MB to `~/.cache/kokoro-onnx/`)
+- Loads the model once and keeps it warm in memory
+- Synthesizes text to audio, resamples 24kHz->48kHz
+- Plays audio via sounddevice
+
+Key components:
+
+| Component | Purpose |
+|-----------|---------|
+| `_ensure_models()` | Download ONNX model + voices on first run via wget |
+| `SpeakerEngine.load()` | Lazy-load Kokoro model into memory |
+| `SpeakerEngine.synthesize()` | Generate audio samples from text |
+| `SpeakerEngine.speak()` | Synthesize + play audio |
+
+### `src/speaker/mcp_server.py` — MCP Server
+
+A FastMCP server exposing one tool:
+
+- `speak(text, voice, speed)` — calls `SpeakerEngine.speak()` directly (in-process)
+- Returns confirmation string or error message
+- Entry point: `speak-mcp` (installed via `uv tool install`)
+
+All agent integrations use this server via MCP protocol over stdio.
+
+### `src/speaker/cli.py` — Standalone CLI
+
+A typer app with one command (`speak`) that:
 
 - Reads text from argument or stdin (`speak -`)
 - Loads config from `~/.config/speaker/config.yaml`
 - Merges CLI flags over config file over defaults
-- Generates audio via kokoro-onnx, resamples to 48kHz, plays via sounddevice
-- Falls back to macOS `say` if kokoro fails or is unavailable
+- Uses `SpeakerEngine` for kokoro backend
+- Falls back to macOS `say` if kokoro fails
 
-Key functions:
+### Agent Configs
 
-| Function | Purpose |
-|----------|---------|
-| `_load_config()` | Parse YAML config, return `tts` section |
-| `_ensure_models()` | Download ONNX model + voices on first run via wget |
-| `_speak_kokoro()` | Generate + play audio via kokoro-onnx + sounddevice |
-| `_speak_macos()` | Fallback: shell out to macOS `say` |
-| `speak()` | CLI entrypoint — resolve config, route to backend |
-
-### `agents/mcp/speaker-server.py` — MCP Bridge
-
-A FastMCP server exposing one tool:
-
-- `speak(text: str) → str` — calls `~/.local/bin/speak` via subprocess
-- Returns confirmation string or error message
-- Timeout: 120s
-
-Kiro CLI launches this server via the `mcpServers` config in the agent JSON. It communicates over stdio using the MCP protocol.
-
-### `agents/kiro/speaker.json` — Kiro Agent Config
-
-Defines the speaker agent for `kiro-cli chat --agent speaker`:
-
-- Points to `persona.md` for the system prompt
-- Declares the `speaker` MCP server (uvx + mcp run)
-- Whitelists `mcp_speaker_speak` in `allowedTools`
-
-### `agents/kiro/speaker/persona.md` — Kiro Persona
-
-System prompt teaching the agent about `@speak-start` / `@speak-stop` toggle and how to call the speak tool.
-
-### `agents/claude/speaker.md` — Claude Code Prompt
-
-System prompt for Claude Code. Uses `/speak-start` / `/speak-stop` and calls the CLI directly via shell (`~/.local/bin/speak "text"`).
+| File | Purpose |
+|------|---------|
+| `agents/kiro/speaker.json` | Kiro agent definition with MCP server config |
+| `agents/kiro/speaker/persona.md` | Kiro system prompt with voice toggle |
+| `agents/claude/mcp.json` | Claude Code MCP server config |
+| `agents/claude/speaker.md` | Claude Code system prompt with voice toggle |
+| `agents/claude/commands/speak-start.md` | Claude Code slash command to enable voice |
+| `agents/claude/commands/speak-stop.md` | Claude Code slash command to disable voice |
+| `agents/gemini/mcp.json` | Gemini CLI MCP server config |
+| `agents/opencode/mcp.json` | OpenCode MCP server config |
+| `agents/crush/crush.json` | Crush MCP server config |
 
 ### `scripts/install.sh` — Installer
 
-- Installs the `speak` CLI via `uv tool install`
+- Installs `speak` CLI and `speak-mcp` server via `uv tool install`
 - Detects Kiro CLI, Claude Code, Gemini CLI by checking for `~/.kiro`, `~/.claude`, `~/.gemini`
-- Symlinks agent configs into the right locations
+- Symlinks/copies agent configs into the right locations
 
-## Config Loading Priority
+## Config Loading Priority (CLI only)
 
 ```mermaid
 flowchart LR
     A[CLI flags<br/>-v -s -b] -->|override| B[config.yaml<br/>~/.config/speaker/] -->|override| C[Defaults<br/>am_michael / 1.0 / kokoro]
 ```
 
-Resolved in `speak()`: CLI flag → config file → hardcoded default.
+Resolved in the CLI `speak()` command: CLI flag -> config file -> hardcoded default.
+
+The MCP server uses its own defaults (am_michael, 1.0) and accepts voice/speed as tool parameters from the agent.
 
 ## Dependencies
 
@@ -150,4 +167,4 @@ Resolved in `speak()`: CLI flag → config file → hardcoded default.
 | `sounddevice` | Cross-platform audio playback |
 | `numpy` | Audio resampling (linear interpolation) |
 | `pyyaml` | Config file parsing |
-| `mcp[cli]` | MCP server framework (optional, for MCP bridge) |
+| `mcp[cli]` | MCP server framework (optional dependency) |

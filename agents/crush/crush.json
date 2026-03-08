@@ -1,0 +1,11 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "mcp": {
+    "speaker": {
+      "type": "stdio",
+      "command": "speak-mcp",
+      "args": [],
+      "timeout": 120
+    }
+  }
+}
