@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
+import logging
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,28 +12,36 @@ import numpy as np
 if TYPE_CHECKING:
     from kokoro_onnx import Kokoro
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_VOICE = "am_michael"
+DEFAULT_SPEED = 1.0
+
 _KOKORO_DIR = Path.home() / ".cache" / "kokoro-onnx"
 _KOKORO_MODEL = _KOKORO_DIR / "kokoro-v1.0.onnx"
 _KOKORO_VOICES = _KOKORO_DIR / "voices-v1.0.bin"
+
+_MODEL_BASE_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 
 _TARGET_SR = 48000
 
 
 def _ensure_models() -> bool:
-    """Download kokoro-onnx model files if missing."""
+    """Download kokoro-onnx model files if missing. Uses atomic rename to prevent corruption."""
     if _KOKORO_MODEL.exists() and _KOKORO_VOICES.exists():
         return True
     _KOKORO_DIR.mkdir(parents=True, exist_ok=True)
-    base = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
     for name in ("kokoro-v1.0.onnx", "voices-v1.0.bin"):
-        if not (_KOKORO_DIR / name).exists():
+        target = _KOKORO_DIR / name
+        if not target.exists():
+            tmp = _KOKORO_DIR / f".{name}.download"
             try:
-                subprocess.run(
-                    ["wget", "-q", f"{base}/{name}", "-O", str(_KOKORO_DIR / name)],
-                    check=True,
-                    timeout=300,
-                )
-            except (subprocess.CalledProcessError, FileNotFoundError):
+                logger.info("Downloading %s...", name)
+                urllib.request.urlretrieve(f"{_MODEL_BASE_URL}/{name}", str(tmp))
+                tmp.rename(target)
+            except Exception:
+                logger.warning("Failed to download %s", name, exc_info=True)
+                tmp.unlink(missing_ok=True)
                 return False
     return _KOKORO_MODEL.exists() and _KOKORO_VOICES.exists()
 
@@ -58,16 +67,18 @@ class SpeakerEngine:
 
             self._kokoro = Kokoro(str(_KOKORO_MODEL), str(_KOKORO_VOICES))
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("Failed to load Kokoro model", exc_info=True)
             return False
 
     def synthesize(
-        self, text: str, *, voice: str = "am_michael", speed: float = 1.0
+        self, text: str, *, voice: str = DEFAULT_VOICE, speed: float = DEFAULT_SPEED
     ) -> tuple[np.ndarray, int] | None:
         """Synthesize text to audio samples. Returns (samples, sample_rate) or None."""
         if not self.load():
             return None
-        assert self._kokoro is not None
+        if self._kokoro is None:  # type narrowing — load() guarantees this
+            return None
         try:
             samples, sr = self._kokoro.create(text, voice=voice, speed=speed, lang="en-us")
             if sr != _TARGET_SR:
@@ -80,10 +91,11 @@ class SpeakerEngine:
                 ).astype(np.float32)
                 sr = _TARGET_SR
             return samples, sr
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("TTS synthesis failed", exc_info=True)
             return None
 
-    def speak(self, text: str, *, voice: str = "am_michael", speed: float = 1.0) -> bool:
+    def speak(self, text: str, *, voice: str = DEFAULT_VOICE, speed: float = DEFAULT_SPEED) -> bool:
         """Synthesize and play text. Returns True on success."""
         result = self.synthesize(text, voice=voice, speed=speed)
         if result is None:
@@ -95,5 +107,6 @@ class SpeakerEngine:
             sd.play(samples, sr)
             sd.wait()
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
+            logger.warning("Audio playback failed", exc_info=True)
             return False

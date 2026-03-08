@@ -10,7 +10,7 @@ import re
 
 from mcp.server.fastmcp import FastMCP
 
-from speaker.engine import SpeakerEngine
+from speaker.engine import DEFAULT_SPEED, DEFAULT_VOICE, SpeakerEngine
 
 mcp = FastMCP("speaker")
 _engine = SpeakerEngine()
@@ -23,7 +23,7 @@ _RESPONSE_PREVIEW_LENGTH = 80
 
 
 @mcp.tool()
-def speak(text: str, voice: str = "am_michael", speed: float = 1.0) -> str:
+def speak(text: str, voice: str = DEFAULT_VOICE, speed: float = DEFAULT_SPEED) -> str:
     """Speak text aloud using high-quality local TTS.
 
     Call this with the full response text (excluding code blocks)

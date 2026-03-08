@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -29,7 +30,7 @@ def mock_kokoro(monkeypatch):
 
     mod = MagicMock()
     mod.Kokoro = mock_cls
-    monkeypatch.setitem(__import__("sys").modules, "kokoro_onnx", mod)
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", mod)
     return mock_instance
 
 
@@ -37,5 +38,5 @@ def mock_kokoro(monkeypatch):
 def mock_sounddevice(monkeypatch):
     """Patch sounddevice.play and sounddevice.wait."""
     mod = MagicMock()
-    monkeypatch.setitem(__import__("sys").modules, "sounddevice", mod)
+    monkeypatch.setitem(sys.modules, "sounddevice", mod)
     return mod

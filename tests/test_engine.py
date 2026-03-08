@@ -8,7 +8,15 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from speaker.engine import SpeakerEngine, _ensure_models
+from speaker.engine import DEFAULT_SPEED, DEFAULT_VOICE, SpeakerEngine, _ensure_models
+
+
+class TestDefaults:
+    def test_default_voice(self):
+        assert DEFAULT_VOICE == "am_michael"
+
+    def test_default_speed(self):
+        assert DEFAULT_SPEED == 1.0
 
 
 class TestEnsureModels:
@@ -17,32 +25,48 @@ class TestEnsureModels:
         monkeypatch.setattr("speaker.engine._KOKORO_VOICES", MagicMock(exists=lambda: True))
         assert _ensure_models() is True
 
-    def test_downloads(self, tmp_path, monkeypatch):
+    def test_downloads_with_atomic_rename(self, tmp_path, monkeypatch):
         model = tmp_path / "kokoro-v1.0.onnx"
         voices = tmp_path / "voices-v1.0.bin"
         monkeypatch.setattr("speaker.engine._KOKORO_DIR", tmp_path)
         monkeypatch.setattr("speaker.engine._KOKORO_MODEL", model)
         monkeypatch.setattr("speaker.engine._KOKORO_VOICES", voices)
 
-        def fake_run(cmd, **kwargs):
-            Path(cmd[-1]).touch()
+        def fake_urlretrieve(url, filename):
+            Path(filename).touch()
 
-        monkeypatch.setattr("speaker.engine.subprocess.run", fake_run)
+        monkeypatch.setattr("speaker.engine.urllib.request.urlretrieve", fake_urlretrieve)
         assert _ensure_models() is True
         assert model.exists()
         assert voices.exists()
+        # Temp files should not exist after successful download
+        assert not (tmp_path / ".kokoro-v1.0.onnx.download").exists()
+        assert not (tmp_path / ".voices-v1.0.bin.download").exists()
 
-    def test_download_failure(self, tmp_path, monkeypatch):
-        import subprocess
-
+    def test_download_failure_cleans_temp(self, tmp_path, monkeypatch):
         monkeypatch.setattr("speaker.engine._KOKORO_DIR", tmp_path)
         monkeypatch.setattr("speaker.engine._KOKORO_MODEL", tmp_path / "kokoro-v1.0.onnx")
         monkeypatch.setattr("speaker.engine._KOKORO_VOICES", tmp_path / "voices-v1.0.bin")
 
-        def fail_run(cmd, **kwargs):
-            raise subprocess.CalledProcessError(1, "wget")
+        def fail_urlretrieve(url, filename):
+            # Simulate partial download — write temp file then fail
+            Path(filename).touch()
+            raise OSError("network error")
 
-        monkeypatch.setattr("speaker.engine.subprocess.run", fail_run)
+        monkeypatch.setattr("speaker.engine.urllib.request.urlretrieve", fail_urlretrieve)
+        assert _ensure_models() is False
+        # Temp file should be cleaned up on failure
+        assert not (tmp_path / ".kokoro-v1.0.onnx.download").exists()
+
+    def test_download_failure_no_temp(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("speaker.engine._KOKORO_DIR", tmp_path)
+        monkeypatch.setattr("speaker.engine._KOKORO_MODEL", tmp_path / "kokoro-v1.0.onnx")
+        monkeypatch.setattr("speaker.engine._KOKORO_VOICES", tmp_path / "voices-v1.0.bin")
+
+        def fail_urlretrieve(url, filename):
+            raise OSError("network error")
+
+        monkeypatch.setattr("speaker.engine.urllib.request.urlretrieve", fail_urlretrieve)
         assert _ensure_models() is False
 
 
@@ -65,13 +89,12 @@ class TestSpeakerEngine:
 
     def test_load_idempotent(self, mock_kokoro, mock_sounddevice):
         """Loading twice should not re-create the model."""
+        import sys
+
         engine = SpeakerEngine()
         with patch("speaker.engine._ensure_models", return_value=True):
             engine.load()
             engine.load()
-            # Kokoro constructor called only once
-            import sys
-
             sys.modules["kokoro_onnx"].Kokoro.assert_called_once()
 
     def test_synthesize_returns_samples(self, mock_kokoro, mock_sounddevice):
@@ -143,7 +166,6 @@ class TestSpeakerEngine:
         with patch("speaker.engine._ensure_models", return_value=True):
             engine.speak("first")
             engine.speak("second")
-            # Kokoro constructor should only be called once (model stays warm)
             assert mock_kokoro.create.call_count == 2
 
     def test_voice_and_speed_passed_through(self, mock_kokoro, mock_sounddevice):
