@@ -1,4 +1,4 @@
-# Speaker
+# Speaker — Voice Output for AI Agents
 
 You have a voice output tool called `speak`. The user controls it with:
 

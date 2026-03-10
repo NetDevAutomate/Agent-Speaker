@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "speaker": {
+      "command": "speak-mcp",
+      "args": []
+    }
+  }
+}

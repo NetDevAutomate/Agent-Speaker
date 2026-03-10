@@ -109,14 +109,20 @@ All agent integrations use this server via MCP protocol over stdio.
 | `agents/claude/commands/speak-start.md` | Claude Code slash command to enable voice |
 | `agents/claude/commands/speak-stop.md` | Claude Code slash command to disable voice |
 | `agents/gemini/mcp.json` | Gemini CLI MCP server config |
+| `agents/gemini/speaker.md` | Gemini CLI system prompt with voice toggle |
 | `agents/opencode/mcp.json` | OpenCode MCP server config |
+| `agents/opencode/speaker.md` | OpenCode system prompt with voice toggle |
 | `agents/crush/crush.json` | Crush MCP server config |
+| `agents/crush/speaker.md` | Crush system prompt with voice toggle |
+| `agents/amp/mcp.json` | Amp MCP server config |
+| `agents/amp/speaker.md` | Amp system prompt with voice toggle |
 
 ### `scripts/install.sh` — Installer
 
 - Installs `speak-mcp` server via `uv tool install`
-- Detects Kiro CLI, Claude Code, Gemini CLI
-- Merges MCP config into existing agent configs (non-destructive)
+- Detects Kiro CLI, Claude Code, Gemini CLI, OpenCode
+- Merges MCP config and installs system prompts (non-destructive)
+- Crush and Amp use project-level configs — shipped in `agents/` but not auto-installed
 
 ## Dependencies
 

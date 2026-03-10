@@ -40,7 +40,7 @@ class TestMCPSpeak:
 
     def test_short_text_no_ellipsis(self, mock_kokoro, mock_sounddevice):
         result = speak("short")
-        assert "Spoke: short" == result
+        assert result == "Spoke: short"
 
     def test_voice_and_speed_params(self, mock_kokoro, mock_sounddevice):
         result = speak("test", voice="af_heart", speed=1.5)

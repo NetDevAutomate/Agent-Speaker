@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.fixture()
-def mock_kokoro(monkeypatch):
+def mock_kokoro(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Patch kokoro_onnx.Kokoro to return fake samples."""
     fake_samples = np.zeros(4800, dtype=np.float32)
     mock_cls = MagicMock()
@@ -26,7 +26,7 @@ def mock_kokoro(monkeypatch):
 
 
 @pytest.fixture()
-def mock_sounddevice(monkeypatch):
+def mock_sounddevice(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Patch sounddevice.play and sounddevice.wait."""
     mod = MagicMock()
     monkeypatch.setitem(sys.modules, "sounddevice", mod)

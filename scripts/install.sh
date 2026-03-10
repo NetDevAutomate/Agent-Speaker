@@ -74,8 +74,21 @@ if [ -d "$HOME/.gemini" ]; then
   echo "=== Installing Gemini CLI agent ==="
   mkdir -p "$HOME/.gemini"
   merge_mcp_json "$REPO_DIR/agents/gemini/mcp.json" "$HOME/.gemini/mcp.json"
+  link_file "$REPO_DIR/agents/gemini/speaker.md" "$HOME/.gemini/speaker.md"
   info "Gemini: @speak-start / @speak-stop in any session"
 fi
+
+# OpenCode
+if [ -d "$HOME/.config/opencode" ]; then
+  echo ""
+  echo "=== Installing OpenCode agent ==="
+  merge_mcp_json "$REPO_DIR/agents/opencode/mcp.json" "$HOME/.config/opencode/mcp.json"
+  link_file "$REPO_DIR/agents/opencode/speaker.md" "$HOME/.config/opencode/speaker.md"
+  info "OpenCode: @speak-start / @speak-stop in any session"
+fi
+
+# Crush and Amp use project-level configs — ship files in agents/ but don't auto-install globally.
+# Users add them to their project root manually. See docs/agent-install.md.
 
 echo ""
 echo "=== Done ==="
