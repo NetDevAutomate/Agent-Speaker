@@ -19,9 +19,9 @@ sequenceDiagram
     MCP->>MCP: Validate voice, clamp speed, cap text
     MCP->>Engine: engine.speak("Hello", voice="am_michael", speed=1.0)
     Engine->>Engine: Synthesize via kokoro-onnx
-    Engine->>Audio: Play via sounddevice
-    Audio-->>Engine: done
+    Engine->>Audio: Play via sounddevice (non-blocking)
     Engine-->>MCP: True
+    Note over Audio: Audio continues playing<br/>in background
     MCP-->>Agent: "Spoke: Hello..."
 ```
 

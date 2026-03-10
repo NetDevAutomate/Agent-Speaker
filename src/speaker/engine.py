@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import urllib.request
 from pathlib import Path
@@ -23,7 +24,21 @@ _KOKORO_VOICES = _KOKORO_DIR / "voices-v1.0.bin"
 
 _MODEL_BASE_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 
+_EXPECTED_SHA256 = {
+    "kokoro-v1.0.onnx": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",  # pragma: allowlist secret
+    "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",  # pragma: allowlist secret
+}
+
 _TARGET_SR = 48000
+
+
+def _sha256(path: Path) -> str:
+    """Compute SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _ensure_models() -> bool:
@@ -38,6 +53,14 @@ def _ensure_models() -> bool:
             try:
                 logger.info("Downloading %s...", name)
                 urllib.request.urlretrieve(f"{_MODEL_BASE_URL}/{name}", str(tmp))
+                digest = _sha256(tmp)
+                expected = _EXPECTED_SHA256.get(name)
+                if expected and digest != expected:
+                    logger.warning(
+                        "Checksum mismatch for %s: expected %s, got %s", name, expected, digest
+                    )
+                    tmp.unlink(missing_ok=True)
+                    return False
                 tmp.rename(target)
             except Exception:
                 logger.warning("Failed to download %s", name, exc_info=True)
@@ -82,13 +105,15 @@ class SpeakerEngine:
         try:
             samples, sr = self._kokoro.create(text, voice=voice, speed=speed, lang="en-us")
             if sr != _TARGET_SR:
-                samples = np.interp(
-                    np.linspace(
-                        0, len(samples), int(len(samples) * _TARGET_SR / sr), endpoint=False
-                    ),
-                    np.arange(len(samples)),
-                    samples,
-                ).astype(np.float32)
+                ratio = _TARGET_SR / sr
+                if ratio == int(ratio):
+                    samples = np.repeat(samples, int(ratio))
+                else:
+                    samples = np.interp(
+                        np.linspace(0, len(samples), int(len(samples) * ratio), endpoint=False),
+                        np.arange(len(samples)),
+                        samples,
+                    ).astype(np.float32)
                 sr = _TARGET_SR
             return samples, sr
         except Exception:
@@ -105,7 +130,6 @@ class SpeakerEngine:
             import sounddevice as sd
 
             sd.play(samples, sr)
-            sd.wait()
             return True
         except Exception:
             logger.warning("Audio playback failed", exc_info=True)

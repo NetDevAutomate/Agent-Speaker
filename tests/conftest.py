@@ -21,6 +21,7 @@ def mock_kokoro(monkeypatch):
     mod = MagicMock()
     mod.Kokoro = mock_cls
     monkeypatch.setitem(sys.modules, "kokoro_onnx", mod)
+    monkeypatch.setattr("speaker.engine._ensure_models", lambda: True)
     return mock_instance
 
 

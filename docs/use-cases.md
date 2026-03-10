@@ -96,9 +96,9 @@ sequenceDiagram
     Agent->>Agent: Generate response text
     Agent->>User: Display response
     Agent->>MCP: speak(text="Explanation of X...", voice="am_michael")
-    MCP->>Audio: TTS -> play audio
-    Audio-->>MCP: done
+    MCP->>Audio: TTS -> play audio (non-blocking)
     MCP-->>Agent: "Spoke: Explanation of X..."
+    Note over Audio: Audio plays in background
 
     User->>Agent: @speak-stop
     Agent->>Agent: Remember: voice = off

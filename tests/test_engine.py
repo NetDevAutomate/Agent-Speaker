@@ -36,12 +36,40 @@ class TestEnsureModels:
             Path(filename).touch()
 
         monkeypatch.setattr("speaker.engine.urllib.request.urlretrieve", fake_urlretrieve)
+        monkeypatch.setattr("speaker.engine._sha256", lambda _path: "fakehash")
+        monkeypatch.setattr(
+            "speaker.engine._EXPECTED_SHA256",
+            {
+                "kokoro-v1.0.onnx": "fakehash",
+                "voices-v1.0.bin": "fakehash",
+            },
+        )
         assert _ensure_models() is True
         assert model.exists()
         assert voices.exists()
         # Temp files should not exist after successful download
         assert not (tmp_path / ".kokoro-v1.0.onnx.download").exists()
         assert not (tmp_path / ".voices-v1.0.bin.download").exists()
+
+    def test_checksum_mismatch_rejects_download(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("speaker.engine._KOKORO_DIR", tmp_path)
+        monkeypatch.setattr("speaker.engine._KOKORO_MODEL", tmp_path / "kokoro-v1.0.onnx")
+        monkeypatch.setattr("speaker.engine._KOKORO_VOICES", tmp_path / "voices-v1.0.bin")
+
+        def fake_urlretrieve(url, filename):
+            Path(filename).touch()
+
+        monkeypatch.setattr("speaker.engine.urllib.request.urlretrieve", fake_urlretrieve)
+        monkeypatch.setattr(
+            "speaker.engine._EXPECTED_SHA256",
+            {
+                "kokoro-v1.0.onnx": "expected_but_wrong",
+                "voices-v1.0.bin": "expected_but_wrong",
+            },
+        )
+        assert _ensure_models() is False
+        # Temp file should be cleaned up on checksum mismatch
+        assert not (tmp_path / ".kokoro-v1.0.onnx.download").exists()
 
     def test_download_failure_cleans_temp(self, tmp_path, monkeypatch):
         monkeypatch.setattr("speaker.engine._KOKORO_DIR", tmp_path)
@@ -148,7 +176,6 @@ class TestSpeakerEngine:
         with patch("speaker.engine._ensure_models", return_value=True):
             assert engine.speak("hello")
             mock_sounddevice.play.assert_called_once()
-            mock_sounddevice.wait.assert_called_once()
 
     def test_speak_returns_false_on_synth_failure(self):
         engine = SpeakerEngine()

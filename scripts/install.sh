@@ -27,14 +27,15 @@ merge_mcp_json() {
   if [ -f "$target" ]; then
     python3 -c "
 import json, sys
-existing = json.loads(open('$target').read())
-speaker = json.loads(open('$src').read())
+src, target = sys.argv[1], sys.argv[2]
+existing = json.loads(open(target).read())
+speaker = json.loads(open(src).read())
 servers = existing.setdefault('mcpServers', {})
 servers.update(speaker.get('mcpServers', {}))
-with open('$target', 'w') as f:
+with open(target, 'w') as f:
     json.dump(existing, f, indent=2)
     f.write('\n')
-"
+" "$src" "$target"
     info "Merged speaker into existing $(basename "$target")"
   else
     cp "$src" "$target"
@@ -44,7 +45,7 @@ with open('$target', 'w') as f:
 
 # Install MCP server entry point
 echo "=== Installing speak-mcp server ==="
-uv tool install "${REPO_DIR}[mcp]" --force 2>&1 | tail -1
+uv tool install "${REPO_DIR}" --force 2>&1 | tail -1
 
 # Kiro CLI
 if [ -d "$HOME/.kiro" ]; then

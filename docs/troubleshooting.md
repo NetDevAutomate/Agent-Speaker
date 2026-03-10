@@ -116,7 +116,7 @@ python3 -c "import sounddevice; print(sounddevice.query_devices(kind='output'))"
 
 **Symptom:** Short clips get cut off. First ~2 seconds of audio are silent or missing.
 
-**Cause:** AirPlay has a ~2 second buffer. `sd.play()` + `sd.wait()` finishes before AirPlay has flushed its buffer.
+**Cause:** AirPlay has a ~2 second buffer. Audio playback is non-blocking, so the MCP tool returns immediately while audio is still playing. If the MCP server exits before AirPlay flushes its buffer, short clips get cut off.
 
 **Workarounds:**
 - Use wired headphones or built-in speakers for short clips
@@ -153,3 +153,17 @@ ls -lh ~/.cache/kokoro-onnx/
 # kokoro-v1.0.onnx should be ~337MB
 # voices-v1.0.bin should be ~37MB
 ```
+
+## Checksum Mismatch
+
+**Symptom:** Log message `Checksum mismatch for <file>: expected ..., got ...`
+
+**Cause:** The downloaded model file does not match the expected SHA-256 hash. This could indicate a corrupted download or a changed upstream release.
+
+**Fix:**
+```bash
+rm -rf ~/.cache/kokoro-onnx
+# Next speak tool call will re-download and verify
+```
+
+If the error persists, the upstream model files may have changed. Check for a newer version of speaker.

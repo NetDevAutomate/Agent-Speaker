@@ -59,7 +59,7 @@ sequenceDiagram
     Kokoro-->>Engine: samples, sample_rate
     Engine->>Engine: Resample 24kHz -> 48kHz
     Engine->>Audio: sd.play(samples, 48000)
-    Audio-->>Engine: sd.wait()
+    Note over Audio: Non-blocking — audio plays<br/>in background thread
     Engine-->>MCP: True
     MCP-->>Agent: "Spoke: Hello world..."
 ```
@@ -70,7 +70,7 @@ sequenceDiagram
 
 The core module. A `SpeakerEngine` class that:
 
-- Downloads kokoro-onnx model files on first use (~337MB to `~/.cache/kokoro-onnx/`) via urllib with atomic rename
+- Downloads kokoro-onnx model files on first use (~337MB to `~/.cache/kokoro-onnx/`) via urllib with atomic rename and SHA-256 verification
 - Loads the model once and keeps it warm in memory
 - Synthesizes text to audio, resamples 24kHz->48kHz
 - Plays audio via sounddevice
@@ -80,7 +80,9 @@ Key components:
 | Component | Purpose |
 |-----------|---------|
 | `DEFAULT_VOICE`, `DEFAULT_SPEED` | Shared constants for defaults |
-| `_ensure_models()` | Download ONNX model + voices via urllib, atomic temp-file rename |
+| `_EXPECTED_SHA256` | Hardcoded SHA-256 hashes for model integrity verification |
+| `_sha256()` | Compute SHA-256 digest of a downloaded file |
+| `_ensure_models()` | Download ONNX model + voices via urllib, atomic temp-file rename, SHA-256 check |
 | `SpeakerEngine.load()` | Lazy-load Kokoro model into memory |
 | `SpeakerEngine.synthesize()` | Generate audio samples from text |
 | `SpeakerEngine.speak()` | Synthesize + play audio |
@@ -122,5 +124,5 @@ All agent integrations use this server via MCP protocol over stdio.
 |---------|------|
 | `kokoro-onnx` | ONNX TTS model wrapper |
 | `sounddevice` | Cross-platform audio playback |
-| `numpy` | Audio resampling (linear interpolation) |
+| `numpy` | Audio resampling (`np.repeat` for integer ratios, `np.interp` fallback) |
 | `mcp[cli]` | MCP server framework |
