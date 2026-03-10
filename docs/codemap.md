@@ -85,14 +85,17 @@ Key components:
 | `_ensure_models()` | Download ONNX model + voices via urllib, atomic temp-file rename, SHA-256 check |
 | `SpeakerEngine.load()` | Lazy-load Kokoro model into memory |
 | `SpeakerEngine.synthesize()` | Generate audio samples from text |
-| `SpeakerEngine.speak()` | Synthesize + play audio |
+| `SpeakerEngine.get_voices()` | Return sorted list of available voice names |
+| `SpeakerEngine.speak()` | Synthesize + play audio (non-blocking) |
 
 ### `src/speaker/mcp_server.py` — MCP Server
 
-A FastMCP server exposing one tool:
+A FastMCP server exposing three tools:
 
 - `speak(text, voice, speed)` — validates inputs, calls `SpeakerEngine.speak()` directly (in-process)
-- Input validation: voice regex, speed clamped 0.5-2.0, text capped at 10k chars
+- `list_voices()` — returns available kokoro-onnx voice names
+- `speaker_status()` — returns model state, file paths, and voice count
+- Input validation: voice regex, speed clamped 0.5-2.0, text capped at 2k chars
 - Returns confirmation string or error message
 - Entry point: `speak-mcp` (installed via `uv tool install`)
 

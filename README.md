@@ -38,7 +38,7 @@ Voice is off by default. When enabled, the agent calls the `speak` MCP tool with
 
 ## MCP Server
 
-The `speak-mcp` entry point runs a [FastMCP](https://github.com/jlowin/fastmcp) server exposing a single `speak` tool. The Kokoro model stays warm in memory — first call loads the model (~2s), subsequent calls have ~200ms overhead.
+The `speak-mcp` entry point runs a [FastMCP](https://github.com/jlowin/fastmcp) server exposing three tools: `speak`, `list_voices`, and `speaker_status`. The Kokoro model stays warm in memory — first call loads the model (~2s), subsequent calls have ~200ms overhead.
 
 ### Tool Schema
 

@@ -8,15 +8,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from speaker.engine import DEFAULT_SPEED, DEFAULT_VOICE, SpeakerEngine, _ensure_models
-
-
-class TestDefaults:
-    def test_default_voice(self):
-        assert DEFAULT_VOICE == "am_michael"
-
-    def test_default_speed(self):
-        assert DEFAULT_SPEED == 1.0
+from speaker.engine import SpeakerEngine, _ensure_models
 
 
 class TestEnsureModels:
@@ -202,3 +194,15 @@ class TestSpeakerEngine:
             mock_kokoro.create.assert_called_once_with(
                 "test", voice="af_heart", speed=1.5, lang="en-us"
             )
+
+    def test_get_voices(self, mock_kokoro, mock_sounddevice):
+        mock_kokoro.get_voices.return_value = ["am_michael", "af_heart", "bf_emma"]
+        engine = SpeakerEngine()
+        with patch("speaker.engine._ensure_models", return_value=True):
+            voices = engine.get_voices()
+            assert voices == ["af_heart", "am_michael", "bf_emma"]
+
+    def test_get_voices_returns_none_when_model_unavailable(self):
+        engine = SpeakerEngine()
+        with patch("speaker.engine._ensure_models", return_value=False):
+            assert engine.get_voices() is None

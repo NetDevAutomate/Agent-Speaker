@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from speaker import mcp_server
 from speaker.engine import SpeakerEngine
-from speaker.mcp_server import speak
+from speaker.mcp_server import list_voices, speak, speaker_status
 
 
 class TestMCPSpeak:
@@ -89,13 +89,46 @@ class TestInputValidation:
         )
 
     def test_text_truncated_at_limit(self, mock_kokoro, mock_sounddevice):
-        huge_text = "a" * 20_000
+        huge_text = "a" * 5_000
         speak(huge_text)
         actual_text = mock_kokoro.create.call_args[0][0]
-        assert len(actual_text) == 10_000
+        assert len(actual_text) == 2_000
 
     def test_text_under_limit_not_truncated(self, mock_kokoro, mock_sounddevice):
-        text = "a" * 5000
+        text = "a" * 1500
         speak(text)
         actual_text = mock_kokoro.create.call_args[0][0]
-        assert len(actual_text) == 5000
+        assert len(actual_text) == 1500
+
+
+class TestListVoices:
+    def setup_method(self):
+        mcp_server._engine = SpeakerEngine()
+
+    def test_returns_voices(self, mock_kokoro, mock_sounddevice):
+        mock_kokoro.get_voices.return_value = ["am_michael", "af_heart", "bf_emma"]
+        result = list_voices()
+        assert "af_heart" in result
+        assert "am_michael" in result
+
+    def test_returns_error_when_unavailable(self):
+        with patch.object(SpeakerEngine, "get_voices", return_value=None):
+            result = list_voices()
+            assert "Could not load" in result
+
+
+class TestSpeakerStatus:
+    def setup_method(self):
+        mcp_server._engine = SpeakerEngine()
+
+    def test_status_unloaded(self):
+        result = speaker_status()
+        assert "Model loaded: False" in result
+
+    def test_status_loaded(self, mock_kokoro, mock_sounddevice):
+        mock_kokoro.get_voices.return_value = ["am_michael", "af_heart"]
+        with patch("speaker.engine._ensure_models", return_value=True):
+            mcp_server._engine.load()
+            result = speaker_status()
+            assert "Model loaded: True" in result
+            assert "Available voices: 2" in result

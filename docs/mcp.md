@@ -25,21 +25,36 @@ sequenceDiagram
     MCP-->>Agent: "Spoke: Hello..."
 ```
 
-## Tool Schema
+## Tools
+
+### `speak`
 
 | Field | Value |
 |-------|-------|
-| Name | `speak` |
 | Parameters | `text: str` — text to speak aloud |
 | | `voice: str = "am_michael"` — kokoro voice name |
 | | `speed: float = 1.0` — speed from 0.5 to 2.0 |
 | Returns | `str` — confirmation (`Spoke: ...`) or error message |
 
+### `list_voices`
+
+| Field | Value |
+|-------|-------|
+| Parameters | none |
+| Returns | `str` — newline-separated list of available voice names |
+
+### `speaker_status`
+
+| Field | Value |
+|-------|-------|
+| Parameters | none |
+| Returns | `str` — model loaded state, file paths, voice count |
+
 ### Input Validation
 
 - **voice**: Must match pattern `{2 lowercase letters}_{2-20 lowercase letters}` (e.g. `am_michael`, `af_heart`)
 - **speed**: Clamped to 0.5-2.0 range
-- **text**: Truncated at 10,000 characters
+- **text**: Truncated at 2,000 characters
 
 ## Entry Point
 
@@ -104,7 +119,7 @@ If the server starts but the tool doesn't work in your agent, check the agent's 
 
 ## Server Source
 
-The server is minimal — one file, one tool, in-process engine:
+The server is minimal — one file, three tools, in-process engine:
 
 ```python
 from mcp.server.fastmcp import FastMCP

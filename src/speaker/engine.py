@@ -104,8 +104,7 @@ class SpeakerEngine:
         """Synthesize text to audio samples. Returns (samples, sample_rate) or None."""
         if not self.load():
             return None
-        if self._kokoro is None:  # type narrowing — load() guarantees this
-            return None
+        assert self._kokoro is not None  # load() guarantees this
         try:
             samples, sr = self._kokoro.create(text, voice=voice, speed=speed, lang="en-us")
             if sr != _TARGET_SR:
@@ -122,6 +121,17 @@ class SpeakerEngine:
             return samples, sr
         except Exception:
             logger.warning("TTS synthesis failed", exc_info=True)
+            return None
+
+    def get_voices(self) -> list[str] | None:
+        """Return sorted list of available voice names, or None if model unavailable."""
+        if not self.load():
+            return None
+        assert self._kokoro is not None
+        try:
+            return sorted(self._kokoro.get_voices())
+        except Exception:
+            logger.warning("Failed to list voices", exc_info=True)
             return None
 
     def speak(self, text: str, *, voice: str = DEFAULT_VOICE, speed: float = DEFAULT_SPEED) -> bool:
