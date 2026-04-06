@@ -475,8 +475,9 @@ site/
 *.db-shm
 *.db-journal
 
-# Personal work-in-progress plans
+# Personal work-in-progress plans and brainstorms
 docs/plans/
+docs/brainstorms/
 
 # Artefacts (served from artefact-store, not committed to source repo)
 docs/artefacts/
